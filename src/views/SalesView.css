@@ -1,0 +1,46 @@
+.stat-label {
+  font-size: 14px;
+  color: #718096;
+  margin-bottom: 8px;
+}
+
+.stat-value {
+  font-size: 28px;
+  font-weight: 700;
+  color: #2d3748;
+}
+
+.payment-badge {
+  display: inline-block;
+  padding: 4px 10px;
+  border-radius: 12px;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.payment-cash {
+  background: #c6f6d5;
+  color: #22543d;
+}
+
+.payment-credit {
+  background: #fed7d7;
+  color: #742a2a;
+}
+
+.payment-card {
+  background: #bee3f8;
+  color: #2c5282;
+}
+
+.empty-state {
+  text-align: center;
+  padding: 60px 20px;
+  color: #a0aec0;
+  font-size: 16px;
+}
+
+.text-danger {
+  color: #f56565;
+  font-weight: 600;
+}
