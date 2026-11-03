@@ -1,15 +1,18 @@
-import { contextBridge, ipcRenderer } from 'electron';
+import electronRenderer from 'electron/renderer';
 import type {
   Product,
   Customer,
   Sale,
   SaleItem,
+  CustomerDebtBill,
   CreateProductInput,
   UpdateProductInput,
   CreateCustomerInput,
   UpdateCustomerInput,
   CreateSaleInput
 } from './types';
+
+const { contextBridge, ipcRenderer } = electronRenderer;
 
 // Expose IPC API to renderer process
 contextBridge.exposeInMainWorld('electronAPI', {
@@ -31,6 +34,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
     getAll: (): Promise<Customer[]> => ipcRenderer.invoke('customers:getAll'),
     getById: (id: number): Promise<Customer | undefined> => 
       ipcRenderer.invoke('customers:getById', id),
+    getDebtBills: (id: number): Promise<CustomerDebtBill[]> =>
+      ipcRenderer.invoke('customers:getDebtBills', id),
     create: (input: CreateCustomerInput): Promise<Customer> => 
       ipcRenderer.invoke('customers:create', input),
     update: (input: UpdateCustomerInput): Promise<Customer | null> => 

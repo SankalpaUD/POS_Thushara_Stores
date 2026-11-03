@@ -1,17 +1,21 @@
 import Database from 'better-sqlite3';
 import path from 'path';
-import { app } from 'electron';
+import electronMain from 'electron/main';
 import type {
   Product,
   Customer,
   Sale,
   SaleItem,
+  CustomerDebtBill,
+  DebtBillItem,
   CreateProductInput,
   UpdateProductInput,
   CreateCustomerInput,
   UpdateCustomerInput,
   CreateSaleInput
 } from './types';
+
+const { app } = electronMain;
 
 let db: Database.Database;
 
@@ -55,10 +59,13 @@ function createTables(): void {
       email TEXT,
       creditLimit REAL NOT NULL DEFAULT 0,
       balance REAL NOT NULL DEFAULT 0,
+      debtDueDate TEXT,
       createdAt TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
       updatedAt TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
     )
   `);
+
+  migrateCustomersTable();
 
   // Sales table
   db.exec(`
@@ -194,13 +201,51 @@ export function getCustomerById(id: number): Customer | undefined {
   return db.prepare('SELECT * FROM customers WHERE id = ?').get(id) as Customer | undefined;
 }
 
+function migrateCustomersTable(): void {
+  const columns = db.prepare('PRAGMA table_info(customers)').all() as Array<{ name: string }>;
+  const columnNames = new Set(columns.map((column) => column.name));
+
+  if (!columnNames.has('debtDueDate')) {
+    db.exec('ALTER TABLE customers ADD COLUMN debtDueDate TEXT');
+  }
+}
+
+export function getCustomerDebtBills(customerId: number): CustomerDebtBill[] {
+  const sales = db.prepare(`
+    SELECT *
+    FROM sales
+    WHERE customerId = ? AND paymentMethod = 'credit'
+    ORDER BY createdAt DESC
+  `).all(customerId) as Sale[];
+
+  const itemStmt = db.prepare(`
+    SELECT
+      sale_items.*,
+      COALESCE(products.name, 'Deleted product') AS productName,
+      COALESCE(products.barcode, '-') AS productBarcode
+    FROM sale_items
+    LEFT JOIN products ON products.id = sale_items.productId
+    WHERE sale_items.saleId = ?
+    ORDER BY sale_items.id
+  `);
+
+  return sales.map((sale) => ({
+    ...sale,
+    items: itemStmt.all(sale.id) as DebtBillItem[]
+  }));
+}
+
 export function createCustomer(input: CreateCustomerInput): Customer {
   const stmt = db.prepare(`
-    INSERT INTO customers (name, phone, email, creditLimit, balance)
-    VALUES (@name, @phone, @email, @creditLimit, 0)
+    INSERT INTO customers (name, phone, email, creditLimit, balance, debtDueDate)
+    VALUES (@name, @phone, @email, 0, @balance, @debtDueDate)
   `);
-  
-  const result = stmt.run(input);
+
+  const result = stmt.run({
+    ...input,
+    balance: input.balance ?? 0,
+    debtDueDate: input.debtDueDate || null
+  });
   return db.prepare('SELECT * FROM customers WHERE id = ?').get(result.lastInsertRowid) as Customer;
 }
 
@@ -220,13 +265,13 @@ export function updateCustomer(input: UpdateCustomerInput): Customer | null {
     updates.push('email = @email');
     params.email = input.email;
   }
-  if (input.creditLimit !== undefined) {
-    updates.push('creditLimit = @creditLimit');
-    params.creditLimit = input.creditLimit;
-  }
   if (input.balance !== undefined) {
     updates.push('balance = @balance');
     params.balance = input.balance;
+  }
+  if (input.debtDueDate !== undefined) {
+    updates.push('debtDueDate = @debtDueDate');
+    params.debtDueDate = input.debtDueDate || null;
   }
 
   if (updates.length === 0) {
@@ -292,7 +337,7 @@ export function createSale(input: CreateSaleInput): Sale {
       });
     }
 
-    // If credit payment, update customer balance
+    // Debt sales increase the customer's outstanding debt.
     if (input.paymentMethod === 'credit' && input.customerId) {
       db.prepare(`
         UPDATE customers SET balance = balance + @amount WHERE id = @customerId

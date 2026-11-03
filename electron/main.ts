@@ -1,5 +1,12 @@
-import { app, BrowserWindow, ipcMain } from 'electron';
+import electronMain from 'electron/main';
 import path from 'path';
+import { fileURLToPath } from 'url';
+
+const { app, BrowserWindow, ipcMain } = electronMain;
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
 import {
   initDatabase,
   getAllProducts,
@@ -9,6 +16,7 @@ import {
   deleteProduct,
   getAllCustomers,
   getCustomerById,
+  getCustomerDebtBills,
   createCustomer,
   updateCustomer,
   createSale,
@@ -94,6 +102,10 @@ function registerIpcHandlers() {
 
   ipcMain.handle('customers:getById', async (_event, id: number) => {
     return getCustomerById(id);
+  });
+
+  ipcMain.handle('customers:getDebtBills', async (_event, id: number) => {
+    return getCustomerDebtBills(id);
   });
 
   ipcMain.handle('customers:create', async (_event, input) => {

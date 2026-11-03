@@ -10,11 +10,63 @@ const POSView: React.FC = () => {
   const [selectedCustomer, setSelectedCustomer] = useState<number | undefined>();
   const [paymentMethod, setPaymentMethod] = useState<'cash' | 'credit' | 'card'>('cash');
   const [searchQuery, setSearchQuery] = useState('');
+  const [toastMessage, setToastMessage] = useState<{message: string, type: 'success' | 'error' | 'info'} | null>(null);
+
+  const showToast = (message: string, type: 'success' | 'error' | 'info' = 'info') => {
+    setToastMessage({ message, type });
+    setTimeout(() => setToastMessage(null), 3000);
+  };
 
   useEffect(() => {
     loadProducts();
     loadCustomers();
   }, []);
+
+  useEffect(() => {
+    let barcodeBuffer = '';
+    let lastKeyTime = Date.now();
+
+    const handleKeyDown = async (e: KeyboardEvent) => {
+      // Ignore if user is typing in an input field
+      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement || e.target instanceof HTMLSelectElement) {
+        return;
+      }
+
+      if (e.key === 'F12') {
+        e.preventDefault();
+        handleCheckout();
+        return;
+      }
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        clearCart();
+        return;
+      }
+
+      const currentTime = Date.now();
+      if (currentTime - lastKeyTime > 50) {
+        barcodeBuffer = '';
+      }
+      lastKeyTime = currentTime;
+
+      if (e.key === 'Enter' && barcodeBuffer.length > 0) {
+        e.preventDefault();
+        const product = products.find(p => p.barcode === barcodeBuffer);
+        if (product) {
+          addToCart(product);
+          showToast(`Added ${product.name}`, 'success');
+        } else {
+          showToast(`Product not found: ${barcodeBuffer}`, 'error');
+        }
+        barcodeBuffer = '';
+      } else if (e.key.length === 1 && !e.ctrlKey && !e.metaKey && !e.altKey) {
+        barcodeBuffer += e.key;
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [cart, selectedCustomer, paymentMethod, customers, products]);
 
   const loadProducts = async () => {
     const data = await window.electronAPI.products.getAll();
@@ -30,27 +82,29 @@ const POSView: React.FC = () => {
     e.preventDefault();
     if (!barcode.trim()) return;
 
-    const product = await window.electronAPI.products.getByBarcode(barcode);
+    const product = products.find(p => p.barcode === barcode.trim());
     if (product) {
       addToCart(product);
       setBarcode('');
+      showToast(`Added ${product.name}`, 'success');
     } else {
-      alert('Product not found');
+      showToast('Product not found', 'error');
     }
   };
 
   const addToCart = (product: Product) => {
-    const existingItem = cart.find(item => item.product.id === product.id);
-    
-    if (existingItem) {
-      setCart(cart.map(item =>
-        item.product.id === product.id
-          ? { ...item, quantity: item.quantity + 1 }
-          : item
-      ));
-    } else {
-      setCart([...cart, { product, quantity: 1 }]);
-    }
+    setCart(prevCart => {
+      const existingItem = prevCart.find(item => item.product.id === product.id);
+      if (existingItem) {
+        return prevCart.map(item =>
+          item.product.id === product.id
+            ? { ...item, quantity: item.quantity + 1 }
+            : item
+        );
+      } else {
+        return [...prevCart, { product, quantity: 1 }];
+      }
+    });
   };
 
   const updateQuantity = (productId: number, quantity: number) => {
@@ -76,24 +130,21 @@ const POSView: React.FC = () => {
 
   const handleCheckout = async () => {
     if (cart.length === 0) {
-      alert('Cart is empty');
+      showToast('Cart is empty', 'error');
       return;
     }
 
-    // Check credit limit if credit payment
+    // Debt sales must be assigned to a customer so the bill can be tracked.
     if (paymentMethod === 'credit') {
       if (!selectedCustomer) {
-        alert('Please select a customer for credit payment');
+        showToast('Please select a customer for debt payment', 'error');
         return;
       }
 
       const customer = customers.find(c => c.id === selectedCustomer);
-      if (customer) {
-        const newBalance = customer.balance + calculateTotal();
-        if (newBalance > customer.creditLimit) {
-          alert(`Credit limit exceeded. Available credit: ${(customer.creditLimit - customer.balance).toFixed(2)}`);
-          return;
-        }
+      if (!customer?.debtDueDate) {
+        showToast('Please set the customer debt payment date before saving a debt sale', 'error');
+        return;
       }
     }
 
@@ -108,19 +159,19 @@ const POSView: React.FC = () => {
         paymentMethod
       });
 
-      alert('Sale completed successfully!');
+      showToast('Sale completed successfully!', 'success');
       setCart([]);
       setSelectedCustomer(undefined);
       setPaymentMethod('cash');
       loadProducts(); // Reload to get updated stock
       loadCustomers(); // Reload to get updated balances
     } catch (error) {
-      alert('Error completing sale: ' + error);
+      showToast('Error completing sale: ' + error, 'error');
     }
   };
 
   const clearCart = () => {
-    if (confirm('Clear all items from cart?')) {
+    if (cart.length > 0 && confirm('Clear all items from cart?')) {
       setCart([]);
     }
   };
@@ -130,11 +181,35 @@ const POSView: React.FC = () => {
     p.barcode.includes(searchQuery)
   );
 
+  const selectedCustomerDetails = selectedCustomer
+    ? customers.find(customer => customer.id === selectedCustomer)
+    : undefined;
+  const currentDebt = selectedCustomerDetails?.balance ?? 0;
+  const newDebt = paymentMethod === 'credit'
+    ? currentDebt + calculateTotal()
+    : currentDebt;
+
+  const formatDueDate = (dateString?: string | null) => {
+    if (!dateString) return 'Not set';
+    return new Date(`${dateString}T00:00:00`).toLocaleDateString();
+  };
+
   return (
     <div className="view-container">
+      {toastMessage && (
+        <div className={`toast-notification toast-${toastMessage.type}`}>
+          {toastMessage.message}
+        </div>
+      )}
+
       <div className="view-header">
         <h2>Point of Sale</h2>
         <p>Scan or search products to add to cart</p>
+        <div className="keyboard-shortcuts-help">
+          <span><span className="kbd">F12</span> Checkout</span>
+          <span><span className="kbd">Esc</span> Clear Cart</span>
+          <span>Scan barcode anytime to quick-add</span>
+        </div>
       </div>
 
       <div className="pos-layout">
@@ -172,25 +247,48 @@ const POSView: React.FC = () => {
               />
             </div>
 
-            <div className="product-list">
-              {filteredProducts.map(product => (
-                <div key={product.id} className="product-item">
-                  <div className="product-info">
-                    <div className="product-name">{product.name}</div>
-                    <div className="product-details">
-                      {product.barcode} | Stock: {product.stock} | Rs. {product.price.toFixed(2)}
-                    </div>
-                  </div>
-                  <button
-                    className="btn btn-primary btn-sm"
-                    onClick={() => addToCart(product)}
-                    disabled={product.stock === 0}
-                  >
-                    {product.stock === 0 ? 'Out of Stock' : 'Add'}
-                  </button>
+            {searchQuery.length === 0 ? (
+              <div className="quick-add-section">
+                <h4 className="section-subtitle">Quick Add Items</h4>
+                <div className="quick-add-grid">
+                  {products.slice(0, 12).map(product => (
+                    <button
+                      key={product.id}
+                      className="quick-add-btn"
+                      onClick={() => {
+                        addToCart(product);
+                        showToast(`Added ${product.name}`, 'success');
+                      }}
+                      disabled={product.stock === 0}
+                    >
+                      <span className="qa-name">{product.name}</span>
+                      <span className="qa-price">Rs. {product.price.toFixed(2)}</span>
+                      {product.stock === 0 && <span className="qa-stock-out">Out of Stock</span>}
+                    </button>
+                  ))}
                 </div>
-              ))}
-            </div>
+              </div>
+            ) : (
+              <div className="product-list">
+                {filteredProducts.map(product => (
+                  <div key={product.id} className="product-item">
+                    <div className="product-info">
+                      <div className="product-name">{product.name}</div>
+                      <div className="product-details">
+                        {product.barcode} | Stock: {product.stock} | Rs. {product.price.toFixed(2)}
+                      </div>
+                    </div>
+                    <button
+                      className="btn btn-primary btn-sm"
+                      onClick={() => addToCart(product)}
+                      disabled={product.stock === 0}
+                    >
+                      {product.stock === 0 ? 'Out of Stock' : 'Add'}
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         </div>
 
@@ -245,20 +343,20 @@ const POSView: React.FC = () => {
 
             <div className="checkout-section">
               <div className="form-group">
-                <label className="form-label">Customer (Optional)</label>
-                <select
-                  className="form-select"
-                  value={selectedCustomer || ''}
-                  onChange={(e) => setSelectedCustomer(e.target.value ? parseInt(e.target.value) : undefined)}
-                >
-                  <option value="">Walk-in Customer</option>
-                  {customers.map(customer => (
-                    <option key={customer.id} value={customer.id}>
-                      {customer.name} (Balance: Rs. {customer.balance.toFixed(2)})
-                    </option>
-                  ))}
-                </select>
-              </div>
+                 <label className="form-label">Customer (Optional)</label>
+                 <select
+                   className="form-select"
+                   value={selectedCustomer || ''}
+                   onChange={(e) => setSelectedCustomer(e.target.value ? parseInt(e.target.value) : undefined)}
+                 >
+                   <option value="">Walk-in Customer</option>
+                   {customers.map(customer => (
+                     <option key={customer.id} value={customer.id}>
+                       {customer.name} (Debt: Rs. {customer.balance.toFixed(2)})
+                     </option>
+                   ))}
+                 </select>
+               </div>
 
               <div className="form-group">
                 <label className="form-label">Payment Method</label>
@@ -269,9 +367,28 @@ const POSView: React.FC = () => {
                 >
                   <option value="cash">Cash</option>
                   <option value="card">Card</option>
-                  <option value="credit">Credit</option>
+                  <option value="credit">Debt</option>
                 </select>
               </div>
+
+              {selectedCustomerDetails && (
+                <div className="debt-summary">
+                  <div className="debt-summary-row">
+                    <span>Current Debt</span>
+                    <strong>Rs. {currentDebt.toFixed(2)}</strong>
+                  </div>
+                  <div className="debt-summary-row">
+                    <span>Payment Date</span>
+                    <strong>{formatDueDate(selectedCustomerDetails.debtDueDate)}</strong>
+                  </div>
+                  {paymentMethod === 'credit' && (
+                     <div className="debt-summary-row debt-summary-highlight">
+                      <span>Debt After Sale</span>
+                      <strong>Rs. {newDebt.toFixed(2)}</strong>
+                    </div>
+                  )}
+                </div>
+              )}
 
               <button
                 className="btn btn-success btn-block"

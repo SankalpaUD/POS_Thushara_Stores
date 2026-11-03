@@ -22,6 +22,10 @@ const SalesView: React.FC = () => {
     return sales.reduce((sum, sale) => sum + sale.totalAmount, 0);
   };
 
+  const getPaymentLabel = (paymentMethod: Sale['paymentMethod']) => {
+    return paymentMethod === 'credit' ? 'DEBT' : paymentMethod.toUpperCase();
+  };
+
   return (
     <div className="view-container">
       <div className="view-header">
@@ -66,7 +70,7 @@ const SalesView: React.FC = () => {
                   <td>{sale.customerId || 'Walk-in'}</td>
                   <td>
                     <span className={`payment-badge payment-${sale.paymentMethod}`}>
-                      {sale.paymentMethod.toUpperCase()}
+                      {getPaymentLabel(sale.paymentMethod)}
                     </span>
                   </td>
                   <td className="text-right">Rs. {sale.totalAmount.toFixed(2)}</td>

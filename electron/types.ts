@@ -16,8 +16,8 @@ export interface Customer {
   name: string;
   phone: string;
   email: string;
-  creditLimit: number;
   balance: number;
+  debtDueDate: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -37,6 +37,15 @@ export interface SaleItem {
   quantity: number;
   unitPrice: number;
   subtotal: number;
+}
+
+export interface DebtBillItem extends SaleItem {
+  productName: string;
+  productBarcode: string;
+}
+
+export interface CustomerDebtBill extends Sale {
+  items: DebtBillItem[];
 }
 
 // Input Types for Creating/Updating Entities
@@ -62,7 +71,8 @@ export interface CreateCustomerInput {
   name: string;
   phone: string;
   email: string;
-  creditLimit: number;
+  balance?: number;
+  debtDueDate?: string | null;
 }
 
 export interface UpdateCustomerInput {
@@ -70,8 +80,8 @@ export interface UpdateCustomerInput {
   name?: string;
   phone?: string;
   email?: string;
-  creditLimit?: number;
   balance?: number;
+  debtDueDate?: string | null;
 }
 
 export interface CreateSaleInput {
