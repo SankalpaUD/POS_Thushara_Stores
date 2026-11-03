@@ -125,6 +125,29 @@
   padding-top: 20px;
 }
 
+.debt-summary {
+  margin-bottom: 16px;
+  padding: 12px 14px;
+  border-radius: 6px;
+  background: #f7fafc;
+  border: 1px solid #e2e8f0;
+}
+
+.debt-summary-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 4px 0;
+  font-size: 14px;
+}
+
+.debt-summary-highlight {
+  margin-top: 6px;
+  padding-top: 10px;
+  border-top: 1px solid #cbd5e0;
+  color: #c53030;
+}
+
 .btn-block {
   width: 100%;
   padding: 15px;
@@ -135,4 +158,118 @@
   .pos-layout {
     grid-template-columns: 1fr;
   }
+}
+
+.toast-notification {
+  position: fixed;
+  top: 20px;
+  right: 20px;
+  padding: 12px 24px;
+  border-radius: 6px;
+  color: white;
+  font-weight: 600;
+  box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+  z-index: 1000;
+  animation: slideIn 0.3s ease-out;
+}
+
+.toast-success {
+  background-color: #48bb78;
+}
+
+.toast-error {
+  background-color: #f56565;
+}
+
+.toast-info {
+  background-color: #4299e1;
+}
+
+@keyframes slideIn {
+  from { transform: translateX(100%); opacity: 0; }
+  to { transform: translateX(0); opacity: 1; }
+}
+
+.quick-add-section {
+  margin-top: 20px;
+}
+
+.section-subtitle {
+  font-size: 16px;
+  font-weight: 600;
+  color: #4a5568;
+  margin-bottom: 12px;
+}
+
+.quick-add-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+  gap: 12px;
+}
+
+.quick-add-btn {
+  background: white;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  cursor: pointer;
+  transition: all 0.2s;
+  height: 100px;
+}
+
+.quick-add-btn:hover:not(:disabled) {
+  border-color: #3182ce;
+  box-shadow: 0 2px 4px rgba(49, 130, 206, 0.1);
+  transform: translateY(-2px);
+}
+
+.quick-add-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  background: #f7fafc;
+}
+
+.qa-name {
+  font-weight: 600;
+  color: #2d3748;
+  text-align: center;
+  font-size: 14px;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.qa-price {
+  font-size: 12px;
+  color: #718096;
+}
+
+.qa-stock-out {
+  font-size: 11px;
+  color: #e53e3e;
+  font-weight: bold;
+  text-transform: uppercase;
+}
+
+.keyboard-shortcuts-help {
+  display: flex;
+  gap: 16px;
+  margin-top: 10px;
+  font-size: 12px;
+  color: #a0aec0;
+}
+
+.kbd {
+  background: #edf2f7;
+  padding: 2px 6px;
+  border-radius: 4px;
+  border: 1px solid #cbd5e0;
+  font-family: monospace;
+  color: #4a5568;
 }

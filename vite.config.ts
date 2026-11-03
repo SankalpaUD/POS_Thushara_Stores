@@ -13,7 +13,7 @@ export default defineConfig({
           build: {
             outDir: 'dist-electron',
             rollupOptions: {
-              external: ['better-sqlite3']
+              external: ['better-sqlite3', 'electron/main']
             }
           }
         }
@@ -22,7 +22,10 @@ export default defineConfig({
         entry: 'electron/preload.ts',
         vite: {
           build: {
-            outDir: 'dist-electron'
+            outDir: 'dist-electron',
+            rollupOptions: {
+              external: ['electron/renderer']
+            }
           }
         }
       }

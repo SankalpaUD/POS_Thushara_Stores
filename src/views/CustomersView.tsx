@@ -1,15 +1,21 @@
 import React, { useState, useEffect } from 'react';
-import type { Customer, CreateCustomerInput } from '../types';
+import type { Customer, CustomerDebtBill, CreateCustomerInput, UpdateCustomerInput } from '../types';
+import './CustomersView.css';
 
 const CustomersView: React.FC = () => {
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [showModal, setShowModal] = useState(false);
+  const [showBillsModal, setShowBillsModal] = useState(false);
   const [editingCustomer, setEditingCustomer] = useState<Customer | null>(null);
-  const [formData, setFormData] = useState<CreateCustomerInput>({
+  const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null);
+  const [debtBills, setDebtBills] = useState<CustomerDebtBill[]>([]);
+  const [loadingBills, setLoadingBills] = useState(false);
+  const [formData, setFormData] = useState<CreateCustomerInput & { balance: number }>({
     name: '',
     phone: '',
     email: '',
-    creditLimit: 0
+    balance: 0,
+    debtDueDate: ''
   });
 
   useEffect(() => {
@@ -26,10 +32,11 @@ const CustomersView: React.FC = () => {
 
     try {
       if (editingCustomer) {
-        await window.electronAPI.customers.update({
+        const updatePayload: UpdateCustomerInput = {
           id: editingCustomer.id,
           ...formData
-        });
+        };
+        await window.electronAPI.customers.update(updatePayload);
       } else {
         await window.electronAPI.customers.create(formData);
       }
@@ -49,9 +56,27 @@ const CustomersView: React.FC = () => {
       name: customer.name,
       phone: customer.phone,
       email: customer.email,
-      creditLimit: customer.creditLimit
+      balance: customer.balance,
+      debtDueDate: customer.debtDueDate || ''
     });
     setShowModal(true);
+  };
+
+  const handleViewBills = async (customer: Customer) => {
+    setSelectedCustomer(customer);
+    setDebtBills([]);
+    setLoadingBills(true);
+    setShowBillsModal(true);
+
+    try {
+      const bills = await window.electronAPI.customers.getDebtBills(customer.id);
+      setDebtBills(bills);
+    } catch (error) {
+      alert('Error loading debt bills: ' + error);
+      setShowBillsModal(false);
+    } finally {
+      setLoadingBills(false);
+    }
   };
 
   const resetForm = () => {
@@ -59,7 +84,8 @@ const CustomersView: React.FC = () => {
       name: '',
       phone: '',
       email: '',
-      creditLimit: 0
+      balance: 0,
+      debtDueDate: ''
     });
   };
 
@@ -69,8 +95,19 @@ const CustomersView: React.FC = () => {
     setShowModal(true);
   };
 
-  const getAvailableCredit = (customer: Customer) => {
-    return customer.creditLimit - customer.balance;
+  const formatDate = (dateString: string) => {
+    return new Date(dateString).toLocaleString();
+  };
+
+  const formatDueDate = (dateString?: string | null) => {
+    if (!dateString) return 'Not set';
+    return new Date(`${dateString}T00:00:00`).toLocaleDateString();
+  };
+
+  const closeBillsModal = () => {
+    setShowBillsModal(false);
+    setSelectedCustomer(null);
+    setDebtBills([]);
   };
 
   return (
@@ -78,7 +115,7 @@ const CustomersView: React.FC = () => {
       <div className="view-header">
         <div>
           <h2>Customer Management</h2>
-          <p>Manage customer details and credit limits</p>
+          <p>Manage customer details, debt amounts, and payment dates</p>
         </div>
         <button className="btn btn-primary" onClick={openAddModal}>
           + Add Customer
@@ -93,9 +130,8 @@ const CustomersView: React.FC = () => {
                 <th>Name</th>
                 <th>Phone</th>
                 <th>Email</th>
-                <th>Credit Limit</th>
-                <th>Balance</th>
-                <th>Available Credit</th>
+                <th>Debt</th>
+                <th>Payment Date</th>
                 <th>Actions</th>
               </tr>
             </thead>
@@ -105,13 +141,12 @@ const CustomersView: React.FC = () => {
                   <td>{customer.name}</td>
                   <td>{customer.phone}</td>
                   <td>{customer.email}</td>
-                  <td>Rs. {customer.creditLimit.toFixed(2)}</td>
                   <td>
                     <span className={customer.balance > 0 ? 'text-danger' : ''}>
                       Rs. {customer.balance.toFixed(2)}
                     </span>
                   </td>
-                  <td>Rs. {getAvailableCredit(customer).toFixed(2)}</td>
+                  <td>{formatDueDate(customer.debtDueDate)}</td>
                   <td>
                     <div className="action-buttons">
                       <button
@@ -119,6 +154,12 @@ const CustomersView: React.FC = () => {
                         onClick={() => handleEdit(customer)}
                       >
                         Edit
+                      </button>
+                      <button
+                        className="btn btn-sm btn-secondary"
+                        onClick={() => handleViewBills(customer)}
+                      >
+                        Bills
                       </button>
                     </div>
                   </td>
@@ -175,15 +216,24 @@ const CustomersView: React.FC = () => {
                 </div>
 
                 <div className="form-group">
-                  <label className="form-label">Credit Limit (Rs.) *</label>
+                  <label className="form-label">Current Debt (Rs.)</label>
                   <input
                     type="number"
                     step="0.01"
                     min="0"
                     className="form-input"
-                    value={formData.creditLimit}
-                    onChange={(e) => setFormData({ ...formData, creditLimit: parseFloat(e.target.value) })}
-                    required
+                    value={formData.balance}
+                    onChange={(e) => setFormData({ ...formData, balance: parseFloat(e.target.value) || 0 })}
+                  />
+                </div>
+
+                <div className="form-group">
+                  <label className="form-label">Debt Payment Date</label>
+                  <input
+                    type="date"
+                    className="form-input"
+                    value={formData.debtDueDate || ''}
+                    onChange={(e) => setFormData({ ...formData, debtDueDate: e.target.value || null })}
                   />
                 </div>
               </div>
@@ -197,6 +247,77 @@ const CustomersView: React.FC = () => {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {showBillsModal && selectedCustomer && (
+        <div className="modal-overlay" onClick={closeBillsModal}>
+          <div className="modal debt-bills-modal" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <div>
+                <h3>{selectedCustomer.name} Debt Bills</h3>
+                <p className="modal-subtitle">
+                  Current debt: Rs. {selectedCustomer.balance.toFixed(2)} | Payment date: {formatDueDate(selectedCustomer.debtDueDate)}
+                </p>
+              </div>
+              <button className="modal-close" onClick={closeBillsModal}>
+                x
+              </button>
+            </div>
+
+            <div className="modal-body">
+              {loadingBills ? (
+                <div className="empty-state">Loading debt bills...</div>
+              ) : debtBills.length === 0 ? (
+                <div className="empty-state">No debt bills for this customer</div>
+              ) : (
+                <div className="debt-bills-list">
+                  {debtBills.map((bill) => (
+                    <div className="debt-bill" key={bill.id}>
+                      <div className="debt-bill-header">
+                        <div>
+                          <strong>Bill #{bill.id}</strong>
+                          <div className="debt-bill-date">{formatDate(bill.createdAt)}</div>
+                        </div>
+                        <strong>Rs. {bill.totalAmount.toFixed(2)}</strong>
+                      </div>
+
+                      <div className="table-container">
+                        <table className="table debt-bill-table">
+                          <thead>
+                            <tr>
+                              <th>Item</th>
+                              <th>Barcode</th>
+                              <th className="text-right">Qty</th>
+                              <th className="text-right">Price</th>
+                              <th className="text-right">Subtotal</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {bill.items.map((item) => (
+                              <tr key={item.id}>
+                                <td>{item.productName}</td>
+                                <td>{item.productBarcode}</td>
+                                <td className="text-right">{item.quantity}</td>
+                                <td className="text-right">Rs. {item.unitPrice.toFixed(2)}</td>
+                                <td className="text-right">Rs. {item.subtotal.toFixed(2)}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            <div className="modal-footer">
+              <button type="button" className="btn btn-secondary" onClick={closeBillsModal}>
+                Close
+              </button>
+            </div>
           </div>
         </div>
       )}
