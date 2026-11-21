@@ -1,9 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import type { Sale } from '../types';
+import SaleDetailModal from '../components/SaleDetailModal';
 import './SalesView.css';
 
 const SalesView: React.FC = () => {
   const [sales, setSales] = useState<Sale[]>([]);
+  const [detailSaleId, setDetailSaleId] = useState<number | null>(null);
 
   useEffect(() => {
     loadSales();
@@ -29,8 +31,10 @@ const SalesView: React.FC = () => {
   return (
     <div className="view-container">
       <div className="view-header">
-        <h2>Sales History</h2>
-        <p>View all completed transactions</p>
+        <div>
+          <h2>Sales History</h2>
+          <p>View all completed transactions — click a sale to see its items</p>
+        </div>
       </div>
 
       <div className="grid grid-3 mb-2">
@@ -57,23 +61,38 @@ const SalesView: React.FC = () => {
               <tr>
                 <th>ID</th>
                 <th>Date & Time</th>
-                <th>Customer ID</th>
+                <th>Customer</th>
                 <th>Payment Method</th>
-                <th>Total Amount</th>
+                <th className="text-right">Total Amount</th>
+                <th aria-hidden="true"></th>
               </tr>
             </thead>
             <tbody>
               {sales.map(sale => (
-                <tr key={sale.id}>
+                <tr
+                  key={sale.id}
+                  className="sale-row"
+                  tabIndex={0}
+                  role="button"
+                  title={`View sale #${sale.id}`}
+                  onClick={() => setDetailSaleId(sale.id)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      e.preventDefault();
+                      setDetailSaleId(sale.id);
+                    }
+                  }}
+                >
                   <td>#{sale.id}</td>
                   <td>{formatDate(sale.createdAt)}</td>
-                  <td>{sale.customerId || 'Walk-in'}</td>
+                  <td>{sale.customerId ? `Customer #${sale.customerId}` : 'Walk-in'}</td>
                   <td>
                     <span className={`payment-badge payment-${sale.paymentMethod}`}>
                       {getPaymentLabel(sale.paymentMethod)}
                     </span>
                   </td>
                   <td className="text-right">Rs. {sale.totalAmount.toFixed(2)}</td>
+                  <td className="sale-row-chevron" aria-hidden="true">›</td>
                 </tr>
               ))}
             </tbody>
@@ -83,6 +102,8 @@ const SalesView: React.FC = () => {
           )}
         </div>
       </div>
+
+      <SaleDetailModal saleId={detailSaleId} onClose={() => setDetailSaleId(null)} />
     </div>
   );
 };

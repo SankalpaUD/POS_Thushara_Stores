@@ -1,5 +1,6 @@
 import { BrowserRouter as Router, Routes, Route, Link, useLocation } from 'react-router-dom';
 import POSView from './views/POSView';
+import DashboardView from './views/DashboardView';
 import InventoryView from './views/InventoryView';
 import SalesView from './views/SalesView';
 import CustomersView from './views/CustomersView';
@@ -16,6 +17,13 @@ function Sidebar() {
         <h1>🏪 Thushara POS</h1>
       </div>
       <nav className="sidebar-nav">
+        <Link 
+          to="/dashboard" 
+          className={`nav-item ${isActive('/dashboard') ? 'active' : ''}`}
+        >
+          <span className="nav-icon">📈</span>
+          <span>Dashboard</span>
+        </Link>
         <Link 
           to="/" 
           className={`nav-item ${isActive('/') ? 'active' : ''}`}
@@ -56,6 +64,7 @@ function AppContent() {
       <div className="main-content">
         <Routes>
           <Route path="/" element={<POSView />} />
+          <Route path="/dashboard" element={<DashboardView />} />
           <Route path="/inventory" element={<InventoryView />} />
           <Route path="/sales" element={<SalesView />} />
           <Route path="/customers" element={<CustomersView />} />

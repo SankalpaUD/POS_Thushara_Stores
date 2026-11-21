@@ -21,7 +21,9 @@ import {
   updateCustomer,
   createSale,
   getAllSales,
-  getSaleItems
+  getSaleItems,
+  getSaleDetail,
+  getDashboardData
 } from './database';
 
 let mainWindow: BrowserWindow | null = null;
@@ -127,5 +129,14 @@ function registerIpcHandlers() {
 
   ipcMain.handle('sales:getItems', async (_event, saleId: number) => {
     return getSaleItems(saleId);
+  });
+
+  ipcMain.handle('sales:getDetail', async (_event, saleId: number) => {
+    return getSaleDetail(saleId);
+  });
+
+  // Dashboard handlers
+  ipcMain.handle('dashboard:get', async () => {
+    return getDashboardData();
   });
 }

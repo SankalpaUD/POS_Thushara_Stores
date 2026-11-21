@@ -48,6 +48,69 @@ export interface CustomerDebtBill extends Sale {
   items: DebtBillItem[];
 }
 
+export interface SaleDetail extends Sale {
+  customerName: string | null;
+  customerPhone: string | null;
+  items: DebtBillItem[];
+}
+
+// Dashboard Types
+
+export interface DashboardSalesTotals {
+  salesCount: number;
+  revenue: number;
+  cash: number;
+  card: number;
+  credit: number;
+}
+
+export interface DashboardDebtSummary {
+  customersWithDebt: number;
+  outstanding: number;
+  overdueCount: number;
+  overdueAmount: number;
+}
+
+export interface DashboardStockItem {
+  id: number;
+  barcode: string;
+  name: string;
+  stock: number;
+}
+
+export interface DashboardTopProduct {
+  productId: number;
+  productName: string;
+  quantity: number;
+  revenue: number;
+}
+
+export interface DashboardDebtor {
+  id: number;
+  name: string;
+  phone: string;
+  balance: number;
+  debtDueDate: string | null;
+}
+
+export interface DashboardRecentSale extends Sale {
+  customerName: string | null;
+}
+
+export interface DashboardData {
+  today: DashboardSalesTotals;
+  yesterday: DashboardSalesTotals;
+  debt: DashboardDebtSummary;
+  stock: {
+    lowStockCount: number;
+    outOfStockCount: number;
+    lowStock: DashboardStockItem[];
+  };
+  topProducts: DashboardTopProduct[];
+  topDebtors: DashboardDebtor[];
+  recentSales: DashboardRecentSale[];
+}
+
 // Input Types for Creating/Updating Entities
 
 export interface CreateProductInput {
@@ -123,6 +186,10 @@ declare global {
         create: (input: CreateSaleInput) => Promise<Sale>;
         getAll: () => Promise<Sale[]>;
         getItems: (saleId: number) => Promise<SaleItem[]>;
+        getDetail: (saleId: number) => Promise<SaleDetail | null>;
+      };
+      dashboard: {
+        get: () => Promise<DashboardData>;
       };
     };
   }

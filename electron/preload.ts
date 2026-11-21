@@ -5,6 +5,8 @@ import type {
   Sale,
   SaleItem,
   CustomerDebtBill,
+  SaleDetail,
+  DashboardData,
   CreateProductInput,
   UpdateProductInput,
   CreateCustomerInput,
@@ -49,5 +51,12 @@ contextBridge.exposeInMainWorld('electronAPI', {
     getAll: (): Promise<Sale[]> => ipcRenderer.invoke('sales:getAll'),
     getItems: (saleId: number): Promise<SaleItem[]> => 
       ipcRenderer.invoke('sales:getItems', saleId),
+    getDetail: (saleId: number): Promise<SaleDetail | null> =>
+      ipcRenderer.invoke('sales:getDetail', saleId),
+  },
+
+  // Dashboard operations
+  dashboard: {
+    get: (): Promise<DashboardData> => ipcRenderer.invoke('dashboard:get'),
   }
 });
