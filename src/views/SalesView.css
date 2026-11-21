@@ -44,3 +44,19 @@
   color: #f56565;
   font-weight: 600;
 }
+
+.sale-row {
+  cursor: pointer;
+}
+
+.sale-row:focus-visible {
+  outline: 2px solid #667eea;
+  outline-offset: -2px;
+}
+
+.sale-row-chevron {
+  color: #a0aec0;
+  font-size: 18px;
+  text-align: right;
+  width: 24px;
+}

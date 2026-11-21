@@ -8,6 +8,14 @@ import type {
   SaleItem,
   CustomerDebtBill,
   DebtBillItem,
+  SaleDetail,
+  DashboardData,
+  DashboardSalesTotals,
+  DashboardDebtSummary,
+  DashboardStockItem,
+  DashboardTopProduct,
+  DashboardDebtor,
+  DashboardRecentSale,
   CreateProductInput,
   UpdateProductInput,
   CreateCustomerInput,
@@ -210,15 +218,8 @@ function migrateCustomersTable(): void {
   }
 }
 
-export function getCustomerDebtBills(customerId: number): CustomerDebtBill[] {
-  const sales = db.prepare(`
-    SELECT *
-    FROM sales
-    WHERE customerId = ? AND paymentMethod = 'credit'
-    ORDER BY createdAt DESC
-  `).all(customerId) as Sale[];
-
-  const itemStmt = db.prepare(`
+function getSaleItemsWithProduct(saleId: number): DebtBillItem[] {
+  return db.prepare(`
     SELECT
       sale_items.*,
       COALESCE(products.name, 'Deleted product') AS productName,
@@ -227,11 +228,20 @@ export function getCustomerDebtBills(customerId: number): CustomerDebtBill[] {
     LEFT JOIN products ON products.id = sale_items.productId
     WHERE sale_items.saleId = ?
     ORDER BY sale_items.id
-  `);
+  `).all(saleId) as DebtBillItem[];
+}
+
+export function getCustomerDebtBills(customerId: number): CustomerDebtBill[] {
+  const sales = db.prepare(`
+    SELECT *
+    FROM sales
+    WHERE customerId = ? AND paymentMethod = 'credit'
+    ORDER BY createdAt DESC
+  `).all(customerId) as Sale[];
 
   return sales.map((sale) => ({
     ...sale,
-    items: itemStmt.all(sale.id) as DebtBillItem[]
+    items: getSaleItemsWithProduct(sale.id)
   }));
 }
 
@@ -361,6 +371,126 @@ export function getSaleItems(saleId: number): SaleItem[] {
   return db.prepare('SELECT * FROM sale_items WHERE saleId = ?').all(saleId) as SaleItem[];
 }
 
+export function getSaleDetail(id: number): SaleDetail | null {
+  const sale = db.prepare(`
+    SELECT
+      sales.*,
+      customers.name AS customerName,
+      customers.phone AS customerPhone
+    FROM sales
+    LEFT JOIN customers ON customers.id = sales.customerId
+    WHERE sales.id = ?
+  `).get(id) as (Sale & { customerName: string | null; customerPhone: string | null }) | undefined;
+
+  if (!sale) {
+    return null;
+  }
+
+  return {
+    ...sale,
+    items: getSaleItemsWithProduct(id)
+  };
+}
+
 export function getDatabase(): Database.Database {
   return db;
+}
+
+// Dashboard operations
+
+function getSalesTotals(dayOffset: number): DashboardSalesTotals {
+  const modifier = dayOffset === 0 ? '0 days' : `-${dayOffset} days`;
+
+  return db.prepare(`
+    SELECT
+      COUNT(*) AS salesCount,
+      COALESCE(SUM(totalAmount), 0) AS revenue,
+      COALESCE(SUM(CASE WHEN paymentMethod = 'cash' THEN totalAmount ELSE 0 END), 0) AS cash,
+      COALESCE(SUM(CASE WHEN paymentMethod = 'card' THEN totalAmount ELSE 0 END), 0) AS card,
+      COALESCE(SUM(CASE WHEN paymentMethod = 'credit' THEN totalAmount ELSE 0 END), 0) AS credit
+    FROM sales
+    WHERE date(createdAt, 'localtime') = date('now', 'localtime', ?)
+  `).get(modifier) as DashboardSalesTotals;
+}
+
+export function getDashboardData(): DashboardData {
+  const today = getSalesTotals(0);
+  const yesterday = getSalesTotals(1);
+
+  const debt = db.prepare(`
+    SELECT
+      COUNT(*) AS customersWithDebt,
+      COALESCE(SUM(balance), 0) AS outstanding,
+      COALESCE(SUM(CASE
+        WHEN debtDueDate IS NOT NULL AND debtDueDate < date('now', 'localtime') THEN 1
+        ELSE 0
+      END), 0) AS overdueCount,
+      COALESCE(SUM(CASE
+        WHEN debtDueDate IS NOT NULL AND debtDueDate < date('now', 'localtime') THEN balance
+        ELSE 0
+      END), 0) AS overdueAmount
+    FROM customers
+    WHERE balance > 0
+  `).get() as DashboardDebtSummary;
+
+  const lowStockCount = db.prepare(
+    'SELECT COUNT(*) AS count FROM products WHERE stock > 0 AND stock < 10'
+  ).get() as { count: number };
+
+  const outOfStockCount = db.prepare(
+    'SELECT COUNT(*) AS count FROM products WHERE stock <= 0'
+  ).get() as { count: number };
+
+  const lowStock = db.prepare(`
+    SELECT id, barcode, name, stock
+    FROM products
+    WHERE stock > 0 AND stock < 10
+    ORDER BY stock ASC, name ASC
+    LIMIT 10
+  `).all() as DashboardStockItem[];
+
+  const topProducts = db.prepare(`
+    SELECT
+      sale_items.productId AS productId,
+      COALESCE(products.name, 'Deleted product') AS productName,
+      SUM(sale_items.quantity) AS quantity,
+      COALESCE(SUM(sale_items.subtotal), 0) AS revenue
+    FROM sale_items
+    JOIN sales ON sales.id = sale_items.saleId
+    LEFT JOIN products ON products.id = sale_items.productId
+    WHERE date(sales.createdAt, 'localtime') = date('now', 'localtime')
+    GROUP BY sale_items.productId
+    ORDER BY quantity DESC
+    LIMIT 5
+  `).all() as DashboardTopProduct[];
+
+  const topDebtors = db.prepare(`
+    SELECT id, name, COALESCE(phone, '') AS phone, balance, debtDueDate
+    FROM customers
+    WHERE balance > 0
+    ORDER BY balance DESC
+    LIMIT 5
+  `).all() as DashboardDebtor[];
+
+  const recentSales = db.prepare(`
+    SELECT sales.*, customers.name AS customerName
+    FROM sales
+    LEFT JOIN customers ON customers.id = sales.customerId
+    ORDER BY sales.createdAt DESC, sales.id DESC
+    LIMIT 8
+  `).all() as DashboardRecentSale[];
+
+  return {
+    today,
+    yesterday,
+    debt,
+    stock: {
+      lowStockCount: lowStockCount.count,
+      outOfStockCount: outOfStockCount.count,
+      lowStock
+    },
+    topProducts,
+    topDebtors,
+    recentSales
+  };
 }
